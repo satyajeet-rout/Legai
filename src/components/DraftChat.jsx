@@ -1,18 +1,14 @@
 import { useState, useRef, useEffect } from 'react';
 import { 
-  Sun, Moon, HelpCircle, Bot,
-  // ThumbsUp, 
-  // ThumbsDown,
-  RotateCcw, Send, Loader, Link, ExternalLink, Home
+  Sun, Moon, HelpCircle, Bot, RotateCcw, Send, 
+  Loader, Link, ExternalLink, Home 
 } from 'lucide-react';
-import '../index.css'
 
 const DraftChat = () => {
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
   const [isDarkMode, setIsDarkMode] = useState(false);
-  const [currentResources, setCurrentResources] = useState([]);
   const [showSources, setShowSources] = useState(false);
   const [messageIdCounter, setMessageIdCounter] = useState(1);
 
@@ -26,75 +22,72 @@ const DraftChat = () => {
     scrollToBottom();
   }, [messages, loading]);
 
-const handleSubmit = async (e) => {
-  e.preventDefault();
-  if (input.trim()) {
-    const userMessageId = messageIdCounter;
-    setMessageIdCounter(prev => prev + 1);
-
-    setMessages(prev => [...prev, { 
-      role: 'user', 
-      content: input.trim(),
-      id: userMessageId
-    }]);
-    setLoading(true);
-    setInput('');
-    setShowSources(false);
-
-    try {
-      const response = await fetch(`${import.meta.env.VITE_API_URL}legal/draft/`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          user_prompt: input.trim()
-        })
-      });
-
-      if (!response.ok) {
-        throw new Error(`API request failed with status ${response.status}`);
-      }
-
-      const data = await response.json();
-      
-      const assistantMessageId = messageIdCounter + 1;
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    if (input.trim()) {
+      const userMessageId = messageIdCounter;
       setMessageIdCounter(prev => prev + 1);
 
-      const resources = data.source_files?.map((file, index) => ({
-        title: file,
-        link: data.links?.[index] || '#',
-      })) || [];
-
-      const formattedResponse = {
-        role: 'assistant',
-        content: {
-          text: data.draft_response, // Updated to use draft_response
-          resources: resources
-        },
-        id: assistantMessageId
-      };
-      
-      setMessages(prev => [...prev, formattedResponse]);
-      setCurrentResources(resources);
-    } catch (error) {
-      console.error('Error:', error);
-      const errorMessageId = messageIdCounter + 1;
-      setMessageIdCounter(prev => prev + 1);
-      
-      setMessages(prev => [...prev, {
-        role: 'assistant',
-        content: {
-          text: `Error: ${error.message}. Please try again.`,
-          resources: []
-        },
-        id: errorMessageId
+      setMessages(prev => [...prev, { 
+        role: 'user', 
+        content: input.trim(),
+        id: userMessageId
       }]);
-    } finally {
-      setLoading(false);
+      setLoading(true);
+      setInput('');
+      setShowSources(false);
+
+      try {
+        const response = await fetch(`${import.meta.env.VITE_API_URL}legal/draft/`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            user_prompt: input.trim()
+          })
+        });
+
+        if (!response.ok) {
+          throw new Error(`API request failed with status ${response.status}`);
+        }
+
+        const data = await response.json();
+        
+        const assistantMessageId = messageIdCounter + 1;
+        setMessageIdCounter(prev => prev + 1);
+
+        const formattedResponse = {
+          role: 'assistant',
+          content: {
+            text: data.draft_response,
+            resources: [{
+              title: 'Generated Document',
+              link: data.doc_link
+            }]
+          },
+          id: assistantMessageId
+        };
+        
+        setMessages(prev => [...prev, formattedResponse]);
+      } catch (error) {
+        console.error('Error:', error);
+        const errorMessageId = messageIdCounter + 1;
+        setMessageIdCounter(prev => prev + 1);
+        
+        setMessages(prev => [...prev, {
+          role: 'assistant',
+          content: {
+            text: `Error: ${error.message}. Please try again.`,
+            resources: []
+          },
+          id: errorMessageId
+        }]);
+      } finally {
+        setLoading(false);
+      }
     }
-  }
-};
+  };
 
   const toggleTheme = () => {
     setIsDarkMode(!isDarkMode);
@@ -106,70 +99,40 @@ const handleSubmit = async (e) => {
 
   const isEmpty = messages.length === 0 && !loading;
 
-const renderAssistantContent = (content) => {
-  if (!content?.text) return null;
+  const renderAssistantContent = (content) => {
+    if (!content?.text) return null;
 
-  const processedText = content.text.replace(/\\n/g, '\n');
-  const lines = processedText.split('\n');
+    const processedText = content.text.replace(/\\n/g, '\n');
+    const lines = processedText.split('\n');
 
-  return (
-    <div className={`space-y-6 ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>
-      <div className={`text-sm leading-relaxed ${
-        isDarkMode ? 'text-gray-300' : 'text-gray-700'
-      }`}>
-        {lines.map((line, index) => {
-          if (!line.trim()) {
-            return <div key={index} className="h-4" />;
-          }
-
-          // Detect different line types
-          const isTitle = line.toUpperCase() === line && line.length > 10;
-          const isMainSection = /^\d+\.(?!\d)/.test(line.trim());
-          const isSubSection = /^\d+\.\d+/.test(line.trim());
-          const isParagraph = !isTitle && !isMainSection && !isSubSection;
-
-          let className = '';
-          if (isTitle) {
-            className = 'text-2xl font-bold my-6';
-          } else if (isMainSection) {
-            className = 'text-xl font-bold mt-6 mb-3';
-          } else if (isSubSection) {
-            className = 'text-lg font-semibold mt-4 mb-2';
-          } else if (isParagraph) {
-            className = 'text-base leading-relaxed mt-2';
-          }
-
-          return (
-            <div key={index} className={className}>
-              <p>{line.trim()}</p>
+    return (
+      <div className={`space-y-6 ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>
+        <div className={`text-sm leading-relaxed whitespace-pre-wrap ${
+          isDarkMode ? 'text-gray-300' : 'text-gray-700'
+        }`}>
+          {lines.map((line, index) => (
+            <div key={index}>
+              {line}
             </div>
-          );
-        })}
+          ))}
+        </div>
       </div>
-    </div>
-  );
-};
+    );
+  };
 
   return (
     <div className="flex h-screen" style={{ backgroundColor: isDarkMode ? '#212121' : '#ffffff' }}>
       <div className="flex-1 flex flex-col relative">
-      {/* Navigation Bar */}
-      <nav
-        className={`border-b p-2 flex items-center justify-between sticky top-0 z-20 ${
+        <nav className={`border-b p-2 flex items-center justify-between sticky top-0 z-20 ${
           isDarkMode ? "border-gray-700" : "border-gray-200"
-        }`}
-        style={{ backgroundColor: isDarkMode ? "#212121" : "#ffffff" }}
-      >
+        }`} style={{ backgroundColor: isDarkMode ? "#212121" : "#ffffff" }}>
           <div className="flex items-center">
-          <a
-            href="/"
-            className={`p-2 rounded-md ${
+            <a href="/" className={`p-2 rounded-md ${
               isDarkMode ? "hover:bg-gray-800 text-white" : "hover:bg-gray-100 text-gray-800"
-            }`}
-          >
-            <Home size={20} />
-          </a>
-        </div>
+            }`}>
+              <Home size={20} />
+            </a>
+          </div>
           <div className="flex items-center gap-2">
             <button onClick={toggleTheme} className={`p-2 rounded-md ${
               isDarkMode ? 'hover:bg-gray-800 text-white' : 'hover:bg-gray-100 text-gray-800'
@@ -184,10 +147,8 @@ const renderAssistantContent = (content) => {
           </div>
         </nav>
 
-        {/* Main Content */}
         <div className="flex-1 overflow-y-auto">
           {isEmpty ? (
-            // Empty State
             <div className="h-full flex flex-col justify-center items-center p-4">
               <h1 className={`text-4xl font-bold text-center mb-8 ${
                 isDarkMode ? 'text-white' : 'text-gray-800'
@@ -222,7 +183,6 @@ const renderAssistantContent = (content) => {
               </div>
             </div>
           ) : (
-            // Chat Interface
             <div className="flex">
               <div className="flex-1">
                 <div className="pb-32">
@@ -242,16 +202,6 @@ const renderAssistantContent = (content) => {
                                 {renderAssistantContent(message.content)}
                               </div>
                               <div className="flex items-center gap-2 mt-2">
-                                {/* <button className={`p-1 rounded ${
-                                  isDarkMode ? 'text-gray-300 hover:bg-gray-800' : 'hover:bg-gray-100'
-                                }`}>
-                                  <ThumbsUp size={16} />
-                                </button>
-                                <button className={`p-1 rounded ${
-                                  isDarkMode ? 'text-gray-300 hover:bg-gray-800' : 'hover:bg-gray-100'
-                                }`}>
-                                  <ThumbsDown size={16} />
-                                </button> */}
                                 <button className={`p-1 rounded ${
                                   isDarkMode ? 'text-gray-300 hover:bg-gray-800' : 'hover:bg-gray-100'
                                 }`}>
@@ -301,13 +251,9 @@ const renderAssistantContent = (content) => {
                   <div ref={messagesEndRef} />
                 </div>
 
-                {/* Input Box */}
-                <div 
-                className={`customWidth fixed bottom-0 p-4 w-full sm:z-[100] ${
+                <div className={`fixed bottom-0 p-4 w-full sm:z-[100] ${
                   isDarkMode ? 'border-gray-700' : 'border-gray-200'
-                }`}
-                style={{ backgroundColor: isDarkMode ? '#212121' : '#ffffff'}}
-                >
+                }`} style={{ backgroundColor: isDarkMode ? '#212121' : '#ffffff'}}>
                   <div className="max-w-2xl mx-auto">
                     <form onSubmit={handleSubmit} className="relative">
                       <input
@@ -337,13 +283,10 @@ const renderAssistantContent = (content) => {
                 </div>
               </div>
 
-              {/* Sources Panel */}
-              {showSources && currentResources.length > 0 && (
-                <div 
-                  className={`w-72 border-l p-4 overflow-y-auto fixed right-0 top-0 h-screen z-40 ${
-                    isDarkMode ? 'border-gray-700 bg-[#212121] text-white' : 'border-gray-200 bg-white text-gray-900'
-                  }`}
-                >
+              {showSources && messages.length > 0 && (
+                <div className={`w-72 border-l p-4 overflow-y-auto fixed right-0 top-0 h-screen z-40 ${
+                  isDarkMode ? 'border-gray-700 bg-[#212121] text-white' : 'border-gray-200 bg-white text-gray-900'
+                }`}>
                   <div className="space-y-4 pb-24">
                     <div className="flex items-center justify-between">
                       <h2 className="text-lg font-semibold flex items-center gap-2">
@@ -359,7 +302,7 @@ const renderAssistantContent = (content) => {
                         ×
                       </button>
                     </div>
-                    {currentResources.map((resource, index) => (
+                    {messages[messages.length - 1]?.content?.resources?.map((resource, index) => (
                       <div
                         key={`${resource.link}-${index}`}
                         className={`space-y-2 p-3 rounded-lg border ${
